@@ -2,392 +2,264 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>WallFlow Ultimate</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+    <title>WallFlow</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & ReactDOM -->
+    <!-- React -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- Babel for JSX -->
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Lucide Icons (UMD) -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/lucide-react@latest/dist/lucide-react.umd.js"></script>
 
     <style>
-        /* Hide Scrollbar but keep functionality */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        body { background-color: black; color: white; -webkit-tap-highlight-color: transparent; }
+        body { background-color: black; color: white; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .safe-top { padding-top: env(safe-area-inset-top); }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 </head>
 <body>
+
+    <!-- Fallback Loading Screen -->
+    <div id="loading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black">
+        <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-zinc-500 text-xs tracking-widest">STARTING...</p>
+    </div>
+
+    <!-- Error Screen (Hidden by default) -->
+    <div id="error-screen" class="fixed inset-0 z-[60] bg-red-900 p-8 hidden overflow-auto">
+        <h1 class="text-2xl font-bold mb-4">App Crashed</h1>
+        <pre id="error-msg" class="text-xs font-mono bg-black/50 p-4 rounded"></pre>
+        <button onclick="window.location.reload()" class="mt-4 bg-white text-black px-6 py-3 rounded-full font-bold">Reload</button>
+    </div>
+
     <div id="root"></div>
 
+    <script>
+        // Global Error Handler
+        window.onerror = function(msg, url, line, col, error) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-screen').style.display = 'block';
+            document.getElementById('error-msg').innerText = msg + "\nLine: " + line;
+        };
+    </script>
+
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
-        
-        // Access icons from the global lucideReact object
-        const { 
-            Home, Heart, Share2, Eye, ChevronLeft, Search, CheckCircle2, 
-            Sparkles, Lock, Smartphone, Image: ImageIcon, Zap, Loader2, 
-            ExternalLink, RefreshCw, Info, X, Copy, Download, Globe 
-        } = lucideReact;
-
-        // --- DATABASE GENERATOR ---
-        const generateDatabase = () => {
-            const db = [];
-            const curated = [
-                { id: 'c1', platform: 'android', cat: 'material', title: 'Liquid Magma', author: 'Susan Wilkinson', seed: 'curated_1' },
-                { id: 'c2', platform: 'android', cat: 'abstract', title: 'Neon Flow', author: 'Anni Roenkae', seed: 'curated_2' },
-                { id: 'c3', platform: 'android', cat: 'oled', title: 'Black Texture', author: 'Kie', seed: 'curated_3' },
-                { id: 'c4', platform: 'ios', cat: 'nature', title: 'Green Valley', author: 'Lukasz Szmigiel', seed: 'curated_4' },
-                { id: 'c5', platform: 'ios', cat: 'arch', title: 'White Building', author: 'Simone Hutsch', seed: 'curated_5' },
-                { id: 'c6', platform: 'ios', cat: 'space', title: 'Deep Orbit', author: 'NASA', seed: 'curated_6' },
-            ];
-            db.push(...curated);
-
-            const androidCats = ['abstract', 'material', 'geometric', 'oled', 'cyberpunk', 'texture'];
-            for (let i = 0; i < 60; i++) {
-                const cat = androidCats[i % androidCats.length];
-                db.push({
-                    id: `gen_and_${i}`,
-                    platform: 'android',
-                    cat: cat,
-                    title: `${cat.charAt(0).toUpperCase() + cat.slice(1)} ${i + 1}`,
-                    author: 'WallFlow AI',
-                    seed: `android_${cat}_${i}_v2`
-                });
-            }
-
-            const iosCats = ['nature', 'arch', 'minimal', 'sky', 'water', 'mountain'];
-            for (let i = 0; i < 60; i++) {
-                const cat = iosCats[i % iosCats.length];
-                db.push({
-                    id: `gen_ios_${i}`,
-                    platform: 'ios',
-                    cat: cat,
-                    title: `${cat.charAt(0).toUpperCase() + cat.slice(1)} View ${i + 1}`,
-                    author: 'WallFlow AI',
-                    seed: `ios_${cat}_${i}_v2`
-                });
-            }
-            return db;
+        // --- ICONS (SVG Paths) ---
+        const ICONS = {
+            Home: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+            Search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm10 2l-4.3-4.3",
+            Heart: "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z",
+            Share: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13",
+            ChevronLeft: "M15 18l-6-6 6-6",
+            Eye: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+            Download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+            Check: "M20 6L9 17l-5-5",
+            Sparkles: "M12 3l1.9 5.8 5.8 1.9-5.8 1.9-1.9 5.8-1.9-5.8-5.8-1.9 5.8-1.9z",
+            Close: "M18 6L6 18M6 6l12 12"
         };
 
-        const DB = generateDatabase();
+        const Icon = ({ name, size = 24, className }) => (
+            <svg 
+                width={size} height={size} viewBox="0 0 24 24" 
+                fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+                className={className}
+            >
+                {typeof ICONS[name] === 'string' ? <path d={ICONS[name]} /> : ICONS[name]}
+            </svg>
+        );
 
         // --- COMPONENTS ---
 
-        const SafeImage = ({ item, quality = 'low', className }) => {
-            const width = quality === 'high' ? 1080 : 400;
-            const height = quality === 'high' ? 1920 : 600;
-            const src = `https://picsum.photos/seed/${item.seed}/${width}/${height}`;
-
+        const SafeImage = ({ seed, className }) => {
+            // High reliability placeholder service
+            const src = `https://picsum.photos/seed/${seed}/800/1200`;
             return (
                 <img 
                     src={src} 
-                    alt={item.title}
+                    className={`${className} bg-zinc-800`} 
                     loading="lazy"
-                    className={`${className} bg-zinc-800 transition-opacity duration-500`}
-                    onError={(e) => { e.target.style.display = 'none'; }}
+                    onError={(e) => e.target.style.opacity = 0.5}
                 />
             );
         };
 
-        const ShareSheet = ({ onClose }) => {
-            const [copied, setCopied] = useState(false);
-            const url = window.location.href;
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}&bgcolor=18181b&color=ffffff&margin=10`;
+        const App = () => {
+            const [tab, setTab] = React.useState('home');
+            const [item, setItem] = React.useState(null);
+            const [platform, setPlatform] = React.useState('ios');
+            const [data, setData] = React.useState([]);
+            const [favs, setFavs] = React.useState([]);
+            const [search, setSearch] = React.useState('');
 
-            const handleCopy = () => {
-                const textArea = document.createElement("textarea");
-                textArea.value = url;
-                document.body.appendChild(textArea);
-                textArea.select();
+            // Init Data
+            React.useEffect(() => {
+                // Generate 50 items
+                const newItems = [];
+                for(let i=0; i<50; i++) {
+                    newItems.push({
+                        id: `id_${i}`,
+                        platform: i % 2 === 0 ? 'ios' : 'android',
+                        title: i % 2 === 0 ? `Nature View ${i}` : `Abstract ${i}`,
+                        cat: i % 2 === 0 ? 'Nature' : 'Material',
+                        seed: `seed_${i}_v4`
+                    });
+                }
+                setData(newItems);
+                
+                // Hide Loading Screen safely
+                const loader = document.getElementById('loading');
+                if(loader) loader.style.display = 'none';
+
+                // Load Favs
                 try {
-                    document.execCommand('copy');
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                } catch (err) { console.error(err); }
-                document.body.removeChild(textArea);
-            };
-
-            return (
-                <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-6 animate-in fade-in duration-200">
-                    <div className="bg-zinc-900 w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 border-t sm:border border-zinc-800 shadow-2xl relative">
-                        <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-6 sm:hidden" onClick={onClose} />
-                        <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white hidden sm:block bg-zinc-800 p-2 rounded-full"><X size={20} /></button>
-                        
-                        <div className="flex flex-col items-center text-center">
-                            <h2 className="text-xl font-bold mb-1 text-white">Share App</h2>
-                            <p className="text-zinc-400 text-xs mb-6 px-4">Scan to open on another device.</p>
-                            <div className="bg-white p-2 rounded-2xl mb-6 shadow-xl">
-                                <img src={qrUrl} alt="QR Code" className="w-48 h-48 rounded-lg" />
-                            </div>
-                            <div className="w-full space-y-3">
-                                <button onClick={handleCopy} className={`w-full py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${copied ? 'bg-green-600 text-white' : 'bg-blue-600 text-white active:scale-95'}`}>
-                                    {copied ? <CheckCircle2 size={18} /> : <Copy size={18} />}
-                                    {copied ? 'Link Copied!' : 'Copy Link'}
-                                </button>
-                                <div className="bg-black/50 rounded-xl p-3 flex items-center gap-3 border border-zinc-800">
-                                    <Globe size={16} className="text-zinc-500 shrink-0" />
-                                    <input readOnly value={url} className="bg-transparent text-zinc-400 text-xs font-mono w-full focus:outline-none" onClick={(e) => e.target.select()}/>
-                                </div>
-                            </div>
-                            <button onClick={onClose} className="mt-4 text-zinc-500 text-sm font-medium py-4 w-full sm:hidden">Close</button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const IOSPreview = ({ time, date }) => (
-            <div className="absolute inset-0 z-20 pointer-events-none flex flex-col items-center pt-20 text-white select-none">
-                <Lock size={20} className="mb-4 opacity-70" />
-                <div className="text-xl font-medium opacity-80 mb-1 drop-shadow-md">{date}</div>
-                <div className="text-8xl font-bold tracking-tight drop-shadow-lg text-center leading-none font-sans">{time}</div>
-            </div>
-        );
-
-        const AndroidPreview = ({ time, date }) => (
-            <div className="absolute inset-0 z-20 pointer-events-none flex flex-col justify-between p-8 text-white select-none">
-                <div className="mt-12">
-                    <div className="text-xl font-medium opacity-90 mb-1">{date}</div>
-                    <div className="text-[5.5rem] leading-none font-bold text-white/95 drop-shadow-lg tracking-tighter">
-                        {time.split(':')[0]}<br/>{time.split(':')[1]}
-                    </div>
-                </div>
-            </div>
-        );
-
-        const FullScreenViewer = ({ item, onClose, onToggleFavorite, isFavorite, platform }) => {
-            const [isPreview, setIsPreview] = useState(false);
-            const [downloadState, setDownloadState] = useState('idle');
-            const [currentTime, setCurrentTime] = useState(new Date());
-
-            useEffect(() => {
-                const t = setInterval(() => setCurrentTime(new Date()), 1000);
-                return () => clearInterval(t);
+                    const saved = localStorage.getItem('wf_favs');
+                    if(saved) setFavs(JSON.parse(saved));
+                } catch(e) {}
             }, []);
 
-            const handleDownload = async () => {
-                setDownloadState('loading');
-                const width = 1080;
-                const height = 1920;
-                const imgUrl = `https://picsum.photos/seed/${item.seed}/${width}/${height}`;
+            // Filtered Data
+            const feed = React.useMemo(() => {
+                let d = data.filter(i => i.platform === platform);
+                if(search) d = d.filter(i => i.title.toLowerCase().includes(search.toLowerCase()));
+                return d;
+            }, [data, platform, search]);
 
-                try {
-                    const response = await fetch(imgUrl);
-                    const blob = await response.blob();
-                    const blobUrl = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = blobUrl;
-                    link.download = `WallFlow-${item.title}.jpg`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(blobUrl);
-                    setDownloadState('success');
-                } catch (error) {
-                    window.open(imgUrl, '_blank');
-                    setDownloadState('fallback');
-                }
-                setTimeout(() => setDownloadState('idle'), 2000);
+            const toggleFav = (it) => {
+                let next = favs.some(f => f.id === it.id) 
+                    ? favs.filter(f => f.id !== it.id) 
+                    : [...favs, it];
+                setFavs(next);
+                localStorage.setItem('wf_favs', JSON.stringify(next));
             };
 
-            const formatTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: false });
-            const formatDate = (d) => d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+            const handleShare = () => {
+                if(navigator.share) {
+                    navigator.share({ title: 'WallFlow', url: window.location.href }).catch(console.error);
+                } else {
+                    alert('Copy Link: ' + window.location.href);
+                }
+            };
 
             return (
-                <div className="fixed inset-0 z-50 bg-black flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                    <SafeImage item={item} quality="high" className="absolute inset-0 w-full h-full object-cover" />
-                    {isPreview && platform === 'ios' && <IOSPreview time={formatTime(currentTime)} date={formatDate(currentTime)} />}
-                    {isPreview && platform === 'android' && <AndroidPreview time={formatTime(currentTime)} date={formatDate(currentTime)} />}
+                <div className="h-screen flex flex-col bg-black text-white font-sans">
                     
-                    {!isPreview && (
-                        <>
-                            <div className="absolute top-0 left-0 w-full p-6 pt-12 flex justify-between items-center z-30 bg-gradient-to-b from-black/80 to-transparent">
-                                <button onClick={onClose} className="w-10 h-10 bg-black/40 backdrop-blur-xl rounded-full text-white flex items-center justify-center border border-white/10 active:scale-95 transition"><ChevronLeft size={24} /></button>
-                                <button onClick={() => onToggleFavorite(item)} className={`w-10 h-10 backdrop-blur-xl rounded-full flex items-center justify-center border border-white/10 active:scale-95 transition ${isFavorite ? 'bg-red-500/80 text-white' : 'bg-black/40 text-white'}`}><Heart size={20} fill={isFavorite ? "currentColor" : "none"} /></button>
+                    {/* FULL SCREEN VIEWER */}
+                    {item && (
+                        <div className="fixed inset-0 z-50 bg-black flex flex-col animate-[fade-in_0.2s]">
+                            <SafeImage seed={item.seed} className="absolute inset-0 w-full h-full object-cover" />
+                            
+                            <div className="absolute top-0 left-0 w-full p-4 pt-safe-top flex justify-between z-30 bg-gradient-to-b from-black/80 to-transparent">
+                                <button onClick={() => setItem(null)} className="w-10 h-10 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10">
+                                    <Icon name="ChevronLeft" />
+                                </button>
+                                <button onClick={() => toggleFav(item)} className={`w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 ${favs.some(f=>f.id===item.id)?'bg-red-500/80':'bg-black/40'}`}>
+                                    <Icon name="Heart" />
+                                </button>
                             </div>
-                            <div className="absolute bottom-0 left-0 w-full p-6 pb-12 z-30 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-6">
-                                <div>
-                                    <h2 className="text-3xl font-bold text-white tracking-tight leading-tight drop-shadow-lg">{item.title}</h2>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <span className={`text-[10px] font-bold px-2 py-1 rounded text-white uppercase tracking-wider ${platform === 'ios' ? 'bg-blue-600' : 'bg-green-600'}`}>{item.platform}</span>
-                                        <p className="text-zinc-200 text-sm font-medium uppercase tracking-widest opacity-90 drop-shadow-md">{item.author}</p>
-                                    </div>
-                                </div>
+
+                            <div className="absolute bottom-0 left-0 w-full p-6 pb-safe-bottom z-30 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col gap-4">
+                                <h2 className="text-3xl font-bold">{item.title}</h2>
                                 <div className="flex gap-3">
-                                    <button onClick={() => setIsPreview(true)} className="flex-1 h-14 bg-white/20 backdrop-blur-md border border-white/10 rounded-full text-white font-semibold flex items-center justify-center gap-2 active:bg-white/30 transition active:scale-95"><Eye size={20} /> Preview</button>
-                                    <button onClick={handleDownload} disabled={downloadState === 'loading'} className={`flex-1 h-14 rounded-full font-bold flex items-center justify-center gap-2 shadow-xl transition active:scale-95 ${downloadState === 'success' ? 'bg-green-500 text-white border-none' : 'bg-white text-black'}`}>
-                                        {downloadState === 'loading' ? <Loader2 className="animate-spin w-5 h-5 text-zinc-600" /> : downloadState === 'success' ? <><CheckCircle2 size={20} /> Saved</> : <><Download size={20} /> Save</>}
+                                    <button onClick={() => alert('Feature coming soon')} className="flex-1 h-12 bg-white/20 rounded-full font-bold flex items-center justify-center gap-2 backdrop-blur-md border border-white/10">
+                                        <Icon name="Eye" size={20} /> Preview
+                                    </button>
+                                    <button onClick={() => alert('Long press image to save')} className="flex-1 h-12 bg-white text-black rounded-full font-bold flex items-center justify-center gap-2">
+                                        <Icon name="Download" size={20} /> Save
                                     </button>
                                 </div>
                             </div>
-                        </>
-                    )}
-                    {isPreview && <div className="absolute inset-0 z-50 cursor-pointer" onClick={() => setIsPreview(false)} />}
-                </div>
-            );
-        };
-
-        const WallpaperCard = ({ item, onClick }) => (
-            <div onClick={() => onClick(item)} className="relative rounded-xl overflow-hidden cursor-pointer group shadow-sm bg-zinc-900 break-inside-avoid mb-4 w-full">
-                <SafeImage item={item} quality="low" className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-110 min-h-[180px] bg-zinc-800" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
-                    <p className="text-white font-bold text-sm truncate">{item.title}</p>
-                    <p className="text-zinc-300 text-[10px] uppercase tracking-wide">{item.cat}</p>
-                </div>
-            </div>
-        );
-
-        const App = () => {
-            const [activeTab, setActiveTab] = useState('home');
-            const [selectedItem, setSelectedItem] = useState(null);
-            const [favorites, setFavorites] = useState([]);
-            const [platform, setPlatform] = useState('ios');
-            const [searchTerm, setSearchTerm] = useState('');
-            const [showShareSheet, setShowShareSheet] = useState(false);
-            const [wallpapers, setWallpapers] = useState([]);
-            const [isRefreshing, setIsRefreshing] = useState(false);
-            const [pullY, setPullY] = useState(0);
-            const containerRef = useRef(null);
-            const startY = useRef(0);
-
-            useEffect(() => { shuffleWallpapers(); }, [platform]);
-
-            const shuffleWallpapers = () => {
-                const data = DB.filter(w => w.platform === platform);
-                for (let i = data.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [data[i], data[j]] = [data[j], data[i]];
-                }
-                setWallpapers([...data]);
-            };
-
-            const handleTouchStart = (e) => { if (containerRef.current.scrollTop === 0) startY.current = e.touches[0].clientY; };
-            const handleTouchMove = (e) => {
-                if (containerRef.current.scrollTop === 0) {
-                    const currentY = e.touches[0].clientY;
-                    const diff = currentY - startY.current;
-                    if (diff > 0 && diff < 200) setPullY(diff);
-                }
-            };
-            const handleTouchEnd = () => { if (pullY > 80) handleRefresh(); setPullY(0); };
-            const handleRefresh = () => {
-                setIsRefreshing(true);
-                setTimeout(() => { shuffleWallpapers(); setIsRefreshing(false); }, 1200);
-            };
-
-            const searchResults = useMemo(() => {
-                if (!searchTerm) return [];
-                const lowerTerm = searchTerm.toLowerCase();
-                return DB.filter(w => w.title.toLowerCase().includes(lowerTerm) || w.cat.toLowerCase().includes(lowerTerm));
-            }, [searchTerm]);
-
-            useEffect(() => { const saved = localStorage.getItem('wallflow_favs'); if (saved) setFavorites(JSON.parse(saved)); }, []);
-
-            const toggleFavorite = (item) => {
-                let newFavs;
-                if (favorites.some(f => f.id === item.id)) newFavs = favorites.filter(f => f.id !== item.id);
-                else newFavs = [...favorites, item];
-                setFavorites(newFavs);
-                localStorage.setItem('wallflow_favs', JSON.stringify(newFavs));
-            };
-
-            const handleShareClick = async () => {
-                if (navigator.share) {
-                    try {
-                        await navigator.share({ title: 'WallFlow', text: 'Check out WallFlow!', url: window.location.href });
-                        return;
-                    } catch (e) {}
-                }
-                setShowShareSheet(true);
-            };
-
-            return (
-                <div className="h-screen w-full bg-black text-white font-sans overflow-hidden flex flex-col">
-                    {showShareSheet && <ShareSheet onClose={() => setShowShareSheet(false)} />}
-                    {selectedItem && <FullScreenViewer item={selectedItem} platform={platform} onClose={() => setSelectedItem(null)} isFavorite={favorites.some(f => f.id === selectedItem.id)} onToggleFavorite={toggleFavorite} />}
-                    
-                    <div ref={containerRef} className="flex-1 overflow-y-auto pb-24 scroll-smooth no-scrollbar relative" onTouchStart={activeTab === 'home' ? handleTouchStart : undefined} onTouchMove={activeTab === 'home' ? handleTouchMove : undefined} onTouchEnd={activeTab === 'home' ? handleTouchEnd : undefined}>
-                        <div className="absolute top-0 left-0 w-full flex justify-center items-center pointer-events-none z-10" style={{ height: `${pullY}px`, opacity: Math.min(pullY / 80, 1), transition: pullY === 0 ? 'height 0.3s ease' : 'none' }}>
-                            <div className="bg-zinc-800 p-2 rounded-full shadow-lg"><RefreshCw size={20} className={`text-white ${isRefreshing ? 'animate-spin' : ''}`} style={{ transform: `rotate(${pullY * 2}deg)` }} /></div>
                         </div>
+                    )}
 
-                        {activeTab === 'home' && (
-                            <header className="sticky top-0 z-40 bg-black/90 backdrop-blur-xl pt-4 pb-2 border-b border-zinc-900">
-                                <div className="flex justify-between items-center px-5 mb-4">
-                                    <div className="w-10"></div>
-                                    <div className="flex bg-zinc-900 p-1 rounded-full border border-zinc-800 w-40 relative">
-                                        <div className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full transition-all duration-300 ease-out shadow-md ${platform === 'ios' ? 'left-1 bg-blue-600' : 'left-[calc(50%+2px)] bg-green-600'}`} />
-                                        <button onClick={() => setPlatform('ios')} className={`flex-1 relative z-10 text-[10px] font-bold transition-colors ${platform === 'ios' ? 'text-white' : 'text-zinc-400'}`}>iOS</button>
-                                        <button onClick={() => setPlatform('android')} className={`flex-1 relative z-10 text-[10px] font-bold transition-colors ${platform === 'android' ? 'text-white' : 'text-zinc-400'}`}>Android</button>
+                    {/* HEADER */}
+                    {tab === 'home' && (
+                        <div className="pt-safe-top bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800 sticky top-0 z-40">
+                            <div className="flex justify-between items-center px-4 py-3">
+                                <div className="w-8"></div>
+                                <div className="flex bg-black/30 p-1 rounded-full border border-white/5">
+                                    <button onClick={() => setPlatform('ios')} className={`px-4 py-1 rounded-full text-xs font-bold transition-all ${platform==='ios'?'bg-blue-600 text-white':'text-zinc-400'}`}>iOS</button>
+                                    <button onClick={() => setPlatform('android')} className={`px-4 py-1 rounded-full text-xs font-bold transition-all ${platform==='android'?'bg-green-600 text-white':'text-zinc-400'}`}>Android</button>
+                                </div>
+                                <button onClick={handleShare} className="text-blue-500"><Icon name="Share" /></button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CONTENT */}
+                    <div className="flex-1 overflow-y-auto p-4 hide-scroll pb-24">
+                        {tab === 'home' && (
+                            <>
+                                <div className="mb-6 flex items-center gap-2 text-zinc-500 text-xs font-bold uppercase tracking-wider">
+                                    <Icon name="Sparkles" size={14} /> Weekly Drop
+                                </div>
+                                {feed.length > 0 && (
+                                    <div onClick={() => setItem(feed[0])} className="w-full aspect-[4/3] rounded-2xl overflow-hidden relative mb-8 shadow-xl bg-zinc-900">
+                                        <SafeImage seed={feed[0].seed} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end p-4">
+                                            <h3 className="text-xl font-bold">{feed[0].title}</h3>
+                                        </div>
                                     </div>
-                                    <button onClick={handleShareClick} className="p-2 bg-blue-600 rounded-full text-white shadow-lg shadow-blue-900/40 active:scale-90 transition"><Share2 size={20} /></button>
+                                )}
+                                <div className="grid grid-cols-2 gap-4">
+                                    {feed.slice(1).map(i => (
+                                        <div key={i.id} onClick={() => setItem(i)} className="relative aspect-[9/16] rounded-xl overflow-hidden bg-zinc-900">
+                                            <SafeImage seed={i.seed} className="w-full h-full object-cover" />
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="px-5 flex items-center justify-between pb-2">
-                                    <h1 className="text-xl font-bold tracking-tight">{platform === 'ios' ? 'Apple Collections' : 'Material Collections'}</h1>
-                                    {isRefreshing && <span className="text-xs text-zinc-500 animate-pulse">Refreshing...</span>}
-                                </div>
-                            </header>
+                            </>
                         )}
 
-                        <div className="p-4 min-h-[500px]" style={{ transform: `translateY(${isRefreshing ? 50 : 0}px)`, transition: 'transform 0.3s ease' }}>
-                            {activeTab === 'home' && (
-                                <>
-                                    {wallpapers.length > 0 && (
-                                        <div className="mb-6">
-                                            <div className="flex items-center gap-2 mb-3"><Sparkles size={14} className={platform === 'ios' ? 'text-blue-500' : 'text-green-500'} /><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Weekly Drop</span></div>
-                                            <div onClick={() => setSelectedItem(wallpapers[0])} className="w-full aspect-[4/3] rounded-2xl overflow-hidden relative cursor-pointer group shadow-2xl">
-                                                <SafeImage item={wallpapers[0]} quality="high" className="w-full h-full object-cover transition duration-700 group-hover:scale-105" />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end p-4"><h3 className="text-xl font-bold text-white">{wallpapers[0].title}</h3></div>
+                        {tab === 'search' && (
+                            <div className="pt-safe-top">
+                                <div className="bg-zinc-900 rounded-xl flex items-center px-4 py-3 border border-zinc-800 mb-4">
+                                    <Icon name="Search" className="text-zinc-500 mr-2" />
+                                    <input autoFocus placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} className="bg-transparent w-full outline-none text-white placeholder:text-zinc-600" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {feed.map(i => (
+                                        <div key={i.id} onClick={() => setItem(i)} className="relative aspect-[9/16] rounded-xl overflow-hidden bg-zinc-900">
+                                            <SafeImage seed={i.seed} className="w-full h-full object-cover" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {tab === 'saved' && (
+                            <div className="pt-safe-top">
+                                <h2 className="text-2xl font-bold mb-6">Saved</h2>
+                                {favs.length === 0 ? <div className="text-center text-zinc-600 mt-20">No favorites yet</div> : (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {favs.map(i => (
+                                            <div key={i.id} onClick={() => setItem(i)} className="relative aspect-[9/16] rounded-xl overflow-hidden bg-zinc-900">
+                                                <SafeImage seed={i.seed} className="w-full h-full object-cover" />
                                             </div>
-                                        </div>
-                                    )}
-                                    <div className="flex items-center gap-2 mb-3 mt-8"><Zap size={14} className="text-zinc-500" /><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Trending Now</span></div>
-                                    <div className="columns-2 gap-4 space-y-4">
-                                        {wallpapers.slice(1).map(wp => <WallpaperCard key={wp.id} item={wp} onClick={setSelectedItem} />)}
+                                        ))}
                                     </div>
-                                </>
-                            )}
-
-                            {activeTab === 'search' && (
-                                <div className="pt-2">
-                                    <div className="sticky top-0 bg-black z-20 pb-4">
-                                        <h2 className="text-2xl font-bold mb-4">Search</h2>
-                                        <div className="relative">
-                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
-                                            <input type="text" autoFocus placeholder="Nature, OLED, Abstract..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all" />
-                                        </div>
-                                    </div>
-                                    <div className="columns-2 gap-4 space-y-4">
-                                        {searchResults.map(wp => <WallpaperCard key={wp.id} item={wp} onClick={setSelectedItem} />)}
-                                        {searchTerm && searchResults.length === 0 && <div className="text-center text-zinc-500 mt-20 col-span-2">No results</div>}
-                                    </div>
-                                </div>
-                            )}
-
-                            {activeTab === 'saved' && (
-                                <div className="pt-2">
-                                    <h2 className="text-2xl font-bold mb-6">Your Collection</h2>
-                                    {favorites.length === 0 ? <div className="flex flex-col items-center justify-center pt-32 text-zinc-600"><Heart size={48} className="mb-4 opacity-20" /><p className="text-sm font-medium">No favorites yet.</p></div> : <div className="columns-2 gap-4 space-y-4">{favorites.map(wp => <WallpaperCard key={wp.id} item={wp} onClick={setSelectedItem} />)}</div>}
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
-                    <div className="fixed bottom-0 left-0 w-full bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-900 pb-6 pt-2 px-10 flex justify-between z-40">
-                        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center justify-center gap-1 transition-all w-16 ${activeTab === 'home' ? 'text-white' : 'text-zinc-600'}`}><div className={`p-1 rounded-full ${activeTab === 'home' ? 'bg-zinc-800 translate-y-[-2px]' : ''}`}><Home size={20} strokeWidth={activeTab === 'home' ? 2.5 : 2} /></div><span className="text-[10px] font-medium">Feed</span></button>
-                        <button onClick={() => setActiveTab('search')} className={`flex flex-col items-center justify-center gap-1 transition-all w-16 ${activeTab === 'search' ? 'text-white' : 'text-zinc-600'}`}><div className={`p-1 rounded-full ${activeTab === 'search' ? 'bg-zinc-800 translate-y-[-2px]' : ''}`}><Search size={20} strokeWidth={activeTab === 'search' ? 2.5 : 2} /></div><span className="text-[10px] font-medium">Search</span></button>
-                        <button onClick={() => setActiveTab('saved')} className={`flex flex-col items-center justify-center gap-1 transition-all w-16 ${activeTab === 'saved' ? 'text-white' : 'text-zinc-600'}`}><div className={`p-1 rounded-full ${activeTab === 'saved' ? 'bg-zinc-800 translate-y-[-2px]' : ''}`}><Heart size={20} strokeWidth={activeTab === 'saved' ? 2.5 : 2} /></div><span className="text-[10px] font-medium">Saved</span></button>
+                    {/* TABS */}
+                    <div className="fixed bottom-0 w-full bg-zinc-900/90 backdrop-blur border-t border-zinc-800 pb-safe-bottom pt-2 flex justify-around z-40">
+                        <button onClick={() => setTab('home')} className={`flex flex-col items-center gap-1 ${tab==='home'?'text-white':'text-zinc-600'}`}>
+                            <Icon name="Home" /> <span className="text-[10px]">Feed</span>
+                        </button>
+                        <button onClick={() => setTab('search')} className={`flex flex-col items-center gap-1 ${tab==='search'?'text-white':'text-zinc-600'}`}>
+                            <Icon name="Search" /> <span className="text-[10px]">Search</span>
+                        </button>
+                        <button onClick={() => setTab('saved')} className={`flex flex-col items-center gap-1 ${tab==='saved'?'text-white':'text-zinc-600'}`}>
+                            <Icon name="Heart" /> <span className="text-[10px]">Saved</span>
+                        </button>
                     </div>
                 </div>
             );
@@ -398,3 +270,5 @@
     </script>
 </body>
 </html>
+
+
